@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "func",
+      "label": "func: host start",
+      "command": "host start",
+      "problemMatcher": "$func-node-watch",
+      "isBackground": true,
+      "dependsOn": "build (functions)",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/api"
+      }
+    },
+    {
+      "type": "shell",
+      "label": "build (functions)",
+      "command": "pnpm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/api"
+      },
+      "problemMatcher": "$tsc",
+      "presentation": {
+        "reveal": "silent"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

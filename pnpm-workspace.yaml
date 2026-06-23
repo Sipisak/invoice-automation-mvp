@@ -1,0 +1,5 @@
+# Only the API is a pnpm workspace member.
+# ponytail: apps/web (SPFx) is intentionally OUT — SPFx uses npm + gulp and
+# pnpm's symlinked node_modules breaks its build. Keep web standalone.
+packages:
+  - "apps/api"

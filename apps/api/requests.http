@@ -1,0 +1,8 @@
+### Health check
+GET http://localhost:7071/api/health
+
+### List invoices
+GET http://localhost:7071/api/invoices
+
+### List by status
+GET http://localhost:7071/api/invoices?status=K_ODSOUHLASENI

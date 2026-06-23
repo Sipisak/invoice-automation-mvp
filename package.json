@@ -1,0 +1,17 @@
+{
+  "name": "invoice-automation-mvp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CFIG – automatizace zpracovani prijatych faktur (MVP)",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=18 <19"
+  },
+  "scripts": {
+    "setup": "pnpm install && pnpm --filter api prisma:generate && pnpm --filter api prisma:migrate",
+    "api:dev": "pnpm --filter api start",
+    "api:build": "pnpm --filter api build",
+    "api:migrate": "pnpm --filter api prisma:migrate",
+    "api:studio": "pnpm --filter api prisma:studio"
+  }
+}

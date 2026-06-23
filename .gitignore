@@ -1,0 +1,27 @@
+# deps / build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# prisma sqlite db
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# real secrets only (committed .env holds just a local sqlite path)
+.env.local
+.env.*.local
+
+# runtime invoice data (keep folders via .gitkeep, ignore contents)
+apps/api/data/input/*
+apps/api/data/processed/*
+apps/api/data/archive/*
+apps/api/data/output/*
+!apps/api/data/**/.gitkeep
+
+# azure functions
+apps/api/bin/
+apps/api/obj/
+
+# os / editor
+.DS_Store
+*.log

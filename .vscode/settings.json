@@ -1,0 +1,16 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+  "azureFunctions.deploySubpath": "apps/api",
+  "azureFunctions.projectLanguage": "TypeScript",
+  "azureFunctions.projectRuntime": "~4",
+  "azureFunctions.preDeployTask": "build (functions)",
+  "azureFunctions.projectSubpath": "apps/api",
+  "files.exclude": {
+    "**/dist": true,
+    "**/.tsbuildinfo": true
+  }
+}

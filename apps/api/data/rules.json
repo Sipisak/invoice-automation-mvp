@@ -1,0 +1,15 @@
+{
+  "_comment": "Mock rule engine. Key = ourCompanyIco + ':' + supplierIco. ponytail: JSON now; move to DB when rules need editing in the UI.",
+  "rules": [
+    {
+      "id": "rule-meta-tronexo",
+      "ourCompanyIco": "00000001",
+      "supplierIco": "IE9692928F",
+      "supplierName": "Meta Platforms Ireland Limited",
+      "vatClassification": "PDslRegEU",
+      "accountingPredefinition": "2Fp",
+      "vatRate": "none",
+      "note": "reverse charge EU; FBADS cislo -> inv:originalDocument; rocni kurz"
+    }
+  ]
+}

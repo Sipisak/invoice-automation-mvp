@@ -1,0 +1,99 @@
+// SQLite for local MVP. Swap provider -> "sqlserver" + connection string for Azure SQL.
+// Note: SQLite (Prisma) has NO native enums -> statuses are String with allowed
+// values listed in src/types/enums.ts. App layer enforces them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id         String    @id @default(cuid())
+  name       String
+  ico        String    @unique
+  dic        String?
+  isVatPayer Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  invoices   Invoice[]
+}
+
+model Supplier {
+  id        String    @id @default(cuid())
+  name      String
+  ico       String?   @unique
+  dic       String?
+  createdAt DateTime  @default(now())
+  invoices  Invoice[]
+}
+
+model Batch {
+  id        String    @id @default(cuid())
+  source    String // "timer" | "upload"
+  createdAt DateTime  @default(now())
+  invoices  Invoice[]
+}
+
+model Invoice {
+  id           String  @id @default(cuid())
+  batchId      String
+  batch        Batch   @relation(fields: [batchId], references: [id])
+  fileName     String
+  filePath     String
+  fileHash     String
+  documentType String  @default("FAKTURA")
+
+  // business + technical state (allowed values in src/types/enums.ts)
+  technicalStatus String @default("PROCESSING")
+  businessStatus  String @default("NEPRECTENO_NEUPLNE")
+
+  // ponytail: all extracted fields as ONE JSON blob (ExtractedValue<T> per field).
+  // Promote a field to its own column only when we need to query / index it.
+  extractedData String?
+
+  // denormalized bits we actually route / dedup on
+  ourCompanyId String?
+  ourCompany   Company?  @relation(fields: [ourCompanyId], references: [id])
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  dedupKey     String? // firma+dodavatel+cislo+castka+mena (post-extraction)
+
+  ruleMatched       Boolean @default(false)
+  ruleId            String?
+  routingToPohoda   Boolean @default(false)
+  routingToIntranet Boolean @default(false)
+
+  missingFields   String? // JSON array
+  warnings        String? // JSON array
+  isHardDuplicate Boolean @default(false)
+  isSoftDuplicate Boolean @default(false)
+
+  approvedBy String?
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@index([fileHash])
+  @@index([dedupKey])
+  @@index([businessStatus])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  action    String // CREATED | STATUS_CHANGED | FIELD_OVERRIDDEN | APPROVED ...
+  field     String?
+  before    String?
+  after     String?
+  reason    String?
+  actor     String   @default("system")
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+}

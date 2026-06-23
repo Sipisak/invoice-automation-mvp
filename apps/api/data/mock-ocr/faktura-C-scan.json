@@ -1,0 +1,24 @@
+{
+  "invoiceNumber": {
+    "rawValue": "FV-2024-0098",
+    "normalizedValue": "FV-2024-0098",
+    "confidence": 0.35,
+    "sourceText": "Faktura c. FV-2024-0098"
+  },
+  "issueDate": {
+    "rawValue": "20I.03.2O24",
+    "normalizedValue": null,
+    "confidence": 0.2,
+    "sourceText": "rozmazané datum"
+  },
+  "currency": {
+    "rawValue": "Kc",
+    "normalizedValue": "CZK",
+    "confidence": 0.3
+  },
+  "totalAmount": {
+    "rawValue": null,
+    "normalizedValue": null,
+    "confidence": 0
+  }
+}
