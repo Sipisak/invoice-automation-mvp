@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@azure/functions": "^4.5.1",
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^6.0.0",
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pdf-parse": "^1.1.5",
-    "prisma": "^5.22.0",
+    "prisma": "^6.0.0",
     "rimraf": "^6.0.0",
     "typescript": "^6.0.0"
   }
