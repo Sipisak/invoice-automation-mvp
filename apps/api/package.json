@@ -16,7 +16,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@azure/functions": "^4.5.1",
+    "@azure/functions": "^4.16.1",
     "@prisma/client": "^6.0.0",
     "pdf-parse": "^1.1.1"
   },
