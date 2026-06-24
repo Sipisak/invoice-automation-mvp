@@ -26,8 +26,9 @@ export const InvoiceRepository = {
     });
   },
 
-  // Patch a record after extraction. extractedData is the JSON blob (ExtractedInvoiceData);
-  // statuses move PROCESSING -> EXTRACTED (or FAILED). Caller writes the AuditLog (§17).
+  // Patch a record after extraction/classification. extractedData/missingFields are stored
+  // as JSON strings; statuses move PROCESSING -> EXTRACTED -> CLASSIFIED (or FAILED). The
+  // Day 4 fields (rule/routing/dedup) are denormalized columns. Caller writes AuditLog (§17).
   update(
     id: string,
     patch: {
@@ -35,15 +36,25 @@ export const InvoiceRepository = {
       businessStatus?: BusinessStatus;
       documentType?: string;
       extractedData?: object | null;
+      ruleMatched?: boolean;
+      ruleId?: string | null;
+      routingToPohoda?: boolean;
+      routingToIntranet?: boolean;
+      missingFields?: string[] | null;
+      isHardDuplicate?: boolean;
+      dedupKey?: string | null;
     },
   ) {
-    const { extractedData, ...rest } = patch;
+    const { extractedData, missingFields, ...rest } = patch;
     return prisma.invoice.update({
       where: { id },
       data: {
         ...rest,
         ...(extractedData !== undefined
           ? { extractedData: extractedData ? JSON.stringify(extractedData) : null }
+          : {}),
+        ...(missingFields !== undefined
+          ? { missingFields: missingFields && missingFields.length ? JSON.stringify(missingFields) : null }
           : {}),
       },
     });
@@ -53,6 +64,16 @@ export const InvoiceRepository = {
   findByHash(fileHash: string) {
     return prisma.invoice.findFirst({
       where: { fileHash },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+
+  // Hard-duplicate (§8, post-extraction): earliest record sharing the dedupKey
+  // (firma+dodavatel+číslo+částka+měna). Caller queries BEFORE setting its own key, so this
+  // never self-matches; the earliest is the original this one duplicates.
+  findByDedupKey(dedupKey: string) {
+    return prisma.invoice.findFirst({
+      where: { dedupKey },
       orderBy: { createdAt: 'asc' },
     });
   },

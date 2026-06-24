@@ -1,6 +1,16 @@
 {
-  "_comment": "Mock rule engine. Key = ourCompanyIco + ':' + supplierIco. ponytail: JSON now; move to DB when rules need editing in the UI.",
+  "_comment": "Mock rule engine. MVP matches on supplierIco (the reliably-extracted identifier). ponytail: ourCompanyIco is optional scope metadata — extraction doesn't yield odběratel IČO yet, so it's not used for matching. When it's reliable, tighten the key to ourCompanyIco+supplierIco (§6/§10: the same supplier accounts differently per group company). vatClassification/accountingPredefinition are MOCK illustrative values — real ones come from accounting history; the pipeline stores only ruleId and resolves them at export (Den 6). Move to DB when rules need UI editing.",
   "rules": [
+    {
+      "id": "rule-kovo-novak",
+      "supplierIco": "25896314",
+      "supplierName": "Kovo Novák s.r.o.",
+      "ourCompanyIco": null,
+      "vatClassification": "UN",
+      "accountingPredefinition": "1Fp",
+      "vatRate": "21",
+      "note": "mock: tuzemský dodavatel plátce DPH, běžná přijatá faktura k úhradě"
+    },
     {
       "id": "rule-meta-tronexo",
       "ourCompanyIco": "00000001",

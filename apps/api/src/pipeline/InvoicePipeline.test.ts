@@ -1,4 +1,4 @@
-import { test, before, after } from 'node:test';
+import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
@@ -26,11 +26,28 @@ before(async () => {
   ({ prisma } = await import('../lib/prisma.js'));
 });
 
+// Each test starts from an empty DB — Day 4 dedup/hash logic queries prior rows, so leftover
+// records from other tests would cross-contaminate (false hash/hard duplicates).
+beforeEach(async () => {
+  await prisma.auditLog.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.batch.deleteMany();
+});
+
 after(async () => {
   if (prisma) await prisma.$disconnect();
   rmSync(TEST_DB, { force: true });
   rmSync(`${TEST_DB}-journal`, { force: true });
 });
+
+async function run(fileName: string, buffer: Buffer) {
+  const batch = await BatchRepository.create('upload');
+  return InvoicePipeline.run({ fileName, filePath: 'n/a', buffer }, batch.id);
+}
+
+function sample(fileName: string): Buffer {
+  return readFileSync(path.join(SAMPLES, fileName));
+}
 
 async function actions(invoiceId: string): Promise<string[]> {
   const rows = await prisma.auditLog.findMany({
@@ -40,22 +57,84 @@ async function actions(invoiceId: string): Promise<string[]> {
   return rows.map((r) => r.action);
 }
 
-test('non-duplicate -> EXTRACTED, audit = CREATED then STATUS_CHANGED', async () => {
-  const batch = await BatchRepository.create('upload');
-  const buffer = readFileSync(path.join(SAMPLES, 'faktura-A.pdf'));
-  const inv = await InvoicePipeline.run({ fileName: 'faktura-A.pdf', filePath: 'n/a', buffer }, batch.id);
+// ── Day 4 classification: the three demo scenarios (CLAUDE.md §12/§16) ──
 
-  assert.equal(inv.technicalStatus, 'EXTRACTED');
-  assert.deepEqual(await actions(inv.id), ['CREATED', 'STATUS_CHANGED']);
-  const sc = await prisma.auditLog.findFirst({ where: { invoiceId: inv.id, action: 'STATUS_CHANGED' } });
-  assert.equal(sc?.before, 'PROCESSING');
-  assert.equal(sc?.after, 'EXTRACTED');
+test('faktura-A: complete + rule -> K_ODSOUHLASENI, CLASSIFIED, routes Pohoda+Intranet', async () => {
+  const inv = await run('faktura-A.pdf', sample('faktura-A.pdf'));
+
+  assert.equal(inv.businessStatus, 'K_ODSOUHLASENI');
+  assert.equal(inv.technicalStatus, 'CLASSIFIED');
+  assert.equal(inv.ruleMatched, true);
+  assert.equal(inv.ruleId, 'rule-kovo-novak');
+  assert.equal(inv.routingToPohoda, true);
+  assert.equal(inv.routingToIntranet, true);
+  assert.equal(inv.isHardDuplicate, false);
+
+  // born NEPRECTENO_NEUPLNE -> K_ODSOUHLASENI is a real transition, so it gets its own row.
+  const biz = await prisma.auditLog.findFirst({ where: { invoiceId: inv.id, after: 'K_ODSOUHLASENI' } });
+  assert.ok(biz, 'business STATUS_CHANGED to K_ODSOUHLASENI is audited');
 });
 
+test('faktura-B: readable but no rule -> DOPLNIT_PRAVIDLO, ruleMatched false', async () => {
+  const inv = await run('faktura-B.pdf', sample('faktura-B.pdf'));
+
+  assert.equal(inv.businessStatus, 'DOPLNIT_PRAVIDLO');
+  assert.equal(inv.technicalStatus, 'CLASSIFIED');
+  assert.equal(inv.ruleMatched, false);
+  assert.equal(inv.ruleId, null);
+  assert.equal(inv.routingToPohoda, true); // readable normal faktura -> will route once a rule is added
+});
+
+test('faktura-C-scan: incomplete + low confidence -> NEPRECTENO_NEUPLNE, no fabricated biz transition', async () => {
+  const inv = await run('faktura-C-scan.pdf', sample('faktura-C-scan.pdf'));
+
+  assert.equal(inv.businessStatus, 'NEPRECTENO_NEUPLNE');
+  assert.equal(inv.technicalStatus, 'CLASSIFIED');
+  assert.equal(inv.routingToPohoda, false);
+  assert.equal(inv.routingToIntranet, false);
+  const missing = JSON.parse(inv.missingFields ?? '[]') as string[];
+  assert.ok(missing.includes('totalAmount'), 'unreadable amount reported as missing');
+
+  // born NEPRECTENO_NEUPLNE and classified NEPRECTENO_NEUPLNE -> no business row (§18 truthfulness).
+  // Only CREATED, the EXTRACTED transition, and the technical CLASSIFIED transition.
+  assert.deepEqual(await actions(inv.id), ['CREATED', 'STATUS_CHANGED', 'STATUS_CHANGED']);
+  const toBiz = await prisma.auditLog.findFirst({
+    where: { invoiceId: inv.id, before: 'NEPRECTENO_NEUPLNE', after: 'NEPRECTENO_NEUPLNE' },
+  });
+  assert.equal(toBiz, null, 'no NEPRECTENO->NEPRECTENO no-op transition');
+});
+
+// ── duplicates ──
+
+test('hash-dup: same bytes twice -> second born DUPLICITA, CREATED only (no transition)', async () => {
+  const buffer = sample('faktura-B.pdf');
+  const first = await run('faktura-B.pdf', buffer);
+  const second = await run('faktura-B.pdf', buffer);
+
+  assert.notEqual(first.id, second.id);
+  assert.equal(second.businessStatus, 'DUPLICITA');
+  assert.deepEqual(await actions(second.id), ['CREATED']); // born DUPLICITA, never transitioned
+});
+
+test('hard-dup: same invoice data, different bytes -> second is hard duplicate (§8 post-extraction)', async () => {
+  const original = sample('faktura-A.pdf');
+  // Different bytes, identical text layer: bytes appended after %%EOF are ignored by PDF
+  // readers, so the hash differs (not a hash-dup) but extraction yields the same data.
+  const variant = Buffer.concat([original, Buffer.from('\n% hard-dup variant\n')]);
+
+  const first = await run('faktura-A.pdf', original);
+  const second = await run('faktura-A-copy.pdf', variant);
+
+  assert.notEqual(first.fileHash, second.fileHash, 'different bytes -> not a hash duplicate');
+  assert.equal(first.isHardDuplicate, false);
+  assert.equal(second.isHardDuplicate, true);
+  assert.equal(second.businessStatus, 'DUPLICITA');
+});
+
+// ── failure path (unchanged) ──
+
 test('OCR failure -> FAILED, record stays visible, STATUS_CHANGED carries reason', async () => {
-  const batch = await BatchRepository.create('upload');
-  const buffer = Buffer.from('NOT A PDF — pipeline FAILED-path test'); // no fixture -> pdf-parse throws
-  const inv = await InvoicePipeline.run({ fileName: 'broken.pdf', filePath: 'n/a', buffer }, batch.id);
+  const inv = await run('broken.pdf', Buffer.from('NOT A PDF — pipeline FAILED-path test'));
 
   assert.equal(inv.technicalStatus, 'FAILED');
   const stillThere = await prisma.invoice.findUnique({ where: { id: inv.id } });
@@ -63,21 +142,4 @@ test('OCR failure -> FAILED, record stays visible, STATUS_CHANGED carries reason
   const sc = await prisma.auditLog.findFirst({ where: { invoiceId: inv.id, action: 'STATUS_CHANGED' } });
   assert.equal(sc?.after, 'FAILED');
   assert.match(sc?.reason ?? '', /ocr failed/);
-});
-
-test('same bytes twice -> second born DUPLICITA, CREATED only (no fabricated transition)', async () => {
-  const buffer = readFileSync(path.join(SAMPLES, 'faktura-B.pdf'));
-  const first = await InvoicePipeline.run(
-    { fileName: 'faktura-B.pdf', filePath: 'n/a', buffer },
-    (await BatchRepository.create('upload')).id,
-  );
-  const second = await InvoicePipeline.run(
-    { fileName: 'faktura-B.pdf', filePath: 'n/a', buffer },
-    (await BatchRepository.create('upload')).id,
-  );
-
-  assert.notEqual(first.id, second.id);
-  assert.equal(second.businessStatus, 'DUPLICITA');
-  // born DUPLICITA — it never transitioned, so NO STATUS_CHANGED (audit truthfulness, §18)
-  assert.deepEqual(await actions(second.id), ['CREATED']);
 });

@@ -3,6 +3,22 @@ import { logger } from '../utils/logger';
 import { InvoiceRepository } from '../repositories/InvoiceRepository';
 import { AuditLogService } from '../services/AuditLogService';
 import { OcrService } from '../services/OcrService';
+import { RuleMatchingService } from '../services/RuleMatchingService';
+import { ValidationService } from '../services/ValidationService';
+import { classifyInvoice } from '../services/ClassificationService';
+import type { ExtractedInvoiceData } from '../types/invoice';
+
+// Hard-duplicate key (§8): firma+dodavatel+číslo+částka+měna from extracted data. Null when
+// the identifying core is unreadable — then "duplicate" is meaningless and it's NEPRECTENO anyway.
+function computeDedupKey(data: ExtractedInvoiceData): string | null {
+  const supplier = data.supplier?.normalizedValue;
+  const number = data.invoiceNumber?.normalizedValue;
+  const amount = data.totalAmount?.normalizedValue;
+  if (!supplier || !number || amount === null || amount === undefined) return null;
+  const ourCompany = data.ourCompany?.normalizedValue ?? '';
+  const currency = data.currency?.normalizedValue ?? '';
+  return [ourCompany, supplier, number, amount, currency].join('|');
+}
 
 /**
  * Storage-agnostic file handed to the pipeline. The trigger (timer/upload) is the
@@ -17,8 +33,8 @@ export interface IncomingFile {
 
 /**
  * The single orchestrator (§3, §17). Timer and upload both call this; it doesn't
- * know which. Day 2 scope = hash → hash-dedup → create record → audit.
- * Day 3 adds OCR/normalize, Day 4 adds rules + hard-dup + classify.
+ * know which. Full flow: hash → hash-dedup → create → OCR/extract (Day 3) →
+ * rule match → validate → hard-dup → classify (Day 4) → persist + audit.
  */
 export const InvoicePipeline = {
   async run(file: IncomingFile, batchId: string) {
@@ -65,10 +81,10 @@ export const InvoicePipeline = {
     if (isHashDuplicate) return invoice;
 
     // 5. OCR + field extraction (§3 step 4). On failure the record stays visible as
-    //    FAILED (§12) — never dropped. Classification of these values is Day 4.
+    //    FAILED (§12) — never dropped.
     try {
       const ocr = await OcrService.extract(file);
-      const extracted = await InvoiceRepository.update(invoice.id, {
+      await InvoiceRepository.update(invoice.id, {
         technicalStatus: 'EXTRACTED',
         documentType: ocr.documentType,
         extractedData: ocr.data,
@@ -80,7 +96,54 @@ export const InvoicePipeline = {
         reason: `ocr extracted (confidence ${ocr.overallConfidence.toFixed(2)})`,
       });
       logger.info(`pipeline: ${invoice.id} extracted (conf ${ocr.overallConfidence.toFixed(2)})`);
-      return extracted;
+
+      // 6–9. rule match → validate → hard-dup → classify (§3 steps 6–9, Den 4). Pure
+      //      decisions over the extracted data; the conservative order lives in classifyInvoice.
+      const rule = RuleMatchingService.match(ocr.data);
+      const validation = ValidationService.validate(ocr.data, ocr.documentType);
+      const dedupKey = computeDedupKey(ocr.data);
+      const original = dedupKey ? await InvoiceRepository.findByDedupKey(dedupKey) : null;
+      const isHardDuplicate = original !== null;
+
+      const result = classifyInvoice({
+        isHardDuplicate,
+        validation,
+        rule,
+        documentType: ocr.documentType,
+      });
+
+      const classified = await InvoiceRepository.update(invoice.id, {
+        technicalStatus: 'CLASSIFIED',
+        businessStatus: result.businessStatus,
+        ruleMatched: rule !== null,
+        ruleId: rule?.id ?? null,
+        routingToPohoda: result.routing.toPohoda,
+        routingToIntranet: result.routing.toIntranet,
+        missingFields: validation.missingFields,
+        isHardDuplicate,
+        dedupKey,
+      });
+
+      // Audit: the technical EXTRACTED -> CLASSIFIED transition is always real. The business
+      // status only gets its own row when it ACTUALLY changed from its born NEPRECTENO_NEUPLNE
+      // — no fabricated no-op transition (audit truthfulness, §18).
+      await AuditLogService.log(invoice.id, {
+        action: 'STATUS_CHANGED',
+        before: 'EXTRACTED',
+        after: 'CLASSIFIED',
+        reason: `classified ${result.businessStatus}: ${result.reason}`,
+      });
+      if (result.businessStatus !== invoice.businessStatus) {
+        await AuditLogService.log(invoice.id, {
+          action: 'STATUS_CHANGED',
+          before: invoice.businessStatus,
+          after: result.businessStatus,
+          reason: result.reason,
+        });
+      }
+
+      logger.info(`pipeline: ${invoice.id} classified ${result.businessStatus} (${result.reason})`);
+      return classified;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const failed = await InvoiceRepository.update(invoice.id, { technicalStatus: 'FAILED' });
