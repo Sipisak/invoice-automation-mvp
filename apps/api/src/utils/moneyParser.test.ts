@@ -28,9 +28,9 @@ test('parseCzechAmount: plain integers and dot-decimals', () => {
   assert.equal(parseCzechAmount('1234.5'), 1234.5);
 });
 
-test('parseCzechAmount: NBSP thousands separator', () => {
-  assert.equal(parseCzechAmount('24 200,00'), 24200); // non-breaking space
-  assert.equal(parseCzechAmount('24 200,00'), 24200); // narrow NBSP
+test('parseCzechAmount: NBSP / narrow-NBSP thousands separator', () => {
+  assert.equal(parseCzechAmount('24\u00A0200,00'), 24200); // U+00A0 non-breaking space
+  assert.equal(parseCzechAmount('24\u202F200,00'), 24200); // U+202F narrow no-break space
 });
 
 test('parseCzechAmount: unparseable / empty -> null (never guess, §0)', () => {
