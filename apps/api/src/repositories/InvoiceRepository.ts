@@ -43,6 +43,8 @@ export const InvoiceRepository = {
       missingFields?: string[] | null;
       isHardDuplicate?: boolean;
       dedupKey?: string | null;
+      approvedBy?: string | null;
+      approvedAt?: Date | null;
     },
   ) {
     const { extractedData, missingFields, ...rest } = patch;
