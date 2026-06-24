@@ -31,14 +31,14 @@ ukázat bezpečný end-to-end průchod faktury systémem, ne produkční řešen
 
 ---
 
-## 2. Tech stack (FINÁLNÍ — neměnit bez domluvy)
+## 2. Tech stack (neměnit bez domluvy; verze zvednuty 2026-06-23 — viz pozn.)
 
 | Vrstva | Volba | Pozn. |
 |---|---|---|
-| Backend | **Azure Functions** (TypeScript, Node 18) | lokálně `func start`, produkčně M365/Azure |
-| Frontend | **SPFx 1.20.x React webpart** | poběží jako app v SharePointu |
-| DB | **SQLite + Prisma** | lokálně 1 soubor; produkčně swap na Azure SQL přes connection string |
-| OCR | **pdf-parse** (textová PDF) + **mock fixtures** (scany) | produkčně Azure Document Intelligence za interface |
+| Backend | **Azure Functions v4** (TypeScript 6, Node 22) | lokálně `func start`, produkčně M365/Azure. Node 22 = jediný podporovaný Functions runtime (Node 20 EOL 04/2026) |
+| Frontend | **SPFx React webpart** | poběží jako app v SharePointu. POZOR: SPFx 1.20.x chce Node 18 → při scaffoldu webu zvol verzi SPFx podporující Node 22 (1.21+), jinak konflikt s api |
+| DB | **SQLite + Prisma 6** | lokálně 1 soubor; produkčně swap na Azure SQL. Prisma 7 odložena (vynucuje ESM + driver adapter — viz git) |
+| OCR | **pdf-parse 1.x** (textová PDF) + **mock fixtures** (scany) | pinnuto na v1 (v2 má jiné API); throwaway impl za `OcrService`, produkčně Azure Document Intelligence |
 | Monorepo | **pnpm workspaces** | sdílené typy mezi api a web |
 | Excel export | **ExcelJS** | |
 | XML export | **xmlbuilder2** | |
@@ -47,7 +47,7 @@ Vývojář: **jeden mid+ dev s Claude Code**. Drž kód jednoduchý, čitelný, 
 
 ### Prerekvizity (nainstalovat před Den 1)
 ```bash
-nvm use 18
+nvm use 22
 npm i -g pnpm
 npm i -g azure-functions-core-tools@4 --unsafe-perm true
 npm i -g yo @microsoft/generator-sharepoint gulp-cli
@@ -485,7 +485,9 @@ Duplicita:                             Pohoda NE,  Intranet NE, stav DUPLICITA
 3. **gulp serve je pomalý** (build 20–60s). Používej hot reload, nebuildi ručně.
 4. **PDF náhled v SPFx vynech** — `react-pdf` má bundling problémy (webpack 4 + pdf.js worker).
    Pro MVP zobraz jen vytěžená pole. → known-limitations.
-5. **Node verze**: SPFx 1.20.x chce Node 18. `nvm use 18` před prací.
+5. **Node verze**: api běží na **Node 22** (`nvm use 22`). POZOR na SPFx: 1.20.x chce
+   Node 18 — pokud bude web na 1.20.x, poběží na jiné Node verzi než api (dvě nvm verze),
+   nebo zvol SPFx podporující Node 22. Vyřešit při scaffoldu webu.
 6. **UI auto-refresh je nutný** — faktury přitékají přes timer, takže InvoiceList musí
    sám pollovat (~5s), jinak uživatel nevidí naskakování. Dělá to demo živé.
 7. **Azure Functions process endpoint async**: `upload` vrací 202 + id, zpracování běží
