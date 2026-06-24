@@ -1,5 +1,5 @@
 # Only the API is a pnpm workspace member.
-# ponytail: apps/web (SPFx) is intentionally OUT — SPFx uses npm + gulp and
-# pnpm's symlinked node_modules breaks its build. Keep web standalone.
+# apps/web (Vite + React SPA) is intentionally OUT — kept standalone with its own
+# install (apps/web/.npmrc sets ignore-workspace=true). Pivoted from SPFx.
 packages:
   - "apps/api"

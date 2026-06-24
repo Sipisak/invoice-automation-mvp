@@ -1,7 +1,7 @@
-// Drop into the generated webpart under api/invoicesClient.ts.
-// In production, use SPFx HttpClient instead of fetch (auth handling differs).
+// API client for the Functions backend. Local dev: API_BASE = '/api' and Vite proxies it to
+// http://localhost:7071 (no CORS). Production: set VITE_API_BASE to the deployed API URL.
 
-const API_BASE = 'http://localhost:7071/api';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 export interface InvoiceDto {
   id: string;
@@ -21,17 +21,26 @@ export interface InvoiceDto {
   createdAt: string;
 }
 
+async function asJson<T>(res: Response, label: string): Promise<T> {
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = (await res.json())?.error ?? '';
+    } catch {
+      /* no body */
+    }
+    throw new Error(`${label} ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function listInvoices(status?: string): Promise<InvoiceDto[]> {
   const url = status ? `${API_BASE}/invoices?status=${encodeURIComponent(status)}` : `${API_BASE}/invoices`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`listInvoices ${res.status}`);
-  return res.json();
+  return asJson(await fetch(url), 'listInvoices');
 }
 
 export async function getInvoice(id: string): Promise<InvoiceDto> {
-  const res = await fetch(`${API_BASE}/invoices/${id}`);
-  if (!res.ok) throw new Error(`getInvoice ${res.status}`);
-  return res.json();
+  return asJson(await fetch(`${API_BASE}/invoices/${id}`), 'getInvoice');
 }
 
 export async function approveInvoice(id: string, actor: string): Promise<InvoiceDto> {
@@ -40,12 +49,10 @@ export async function approveInvoice(id: string, actor: string): Promise<Invoice
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor }),
   });
-  if (!res.ok) throw new Error(`approveInvoice ${res.status}`);
-  return res.json();
+  return asJson(res, 'approveInvoice');
 }
 
-// Manual status move (ApprovalBar "Přesunout stav" / "Duplicita"). reason is optional but
-// recommended — it lands in the AuditLog.
+// Manual status move (ApprovalBar "Přesunout stav" / "Duplicita"). reason lands in the AuditLog.
 export async function moveStatus(
   id: string,
   targetStatus: string,
@@ -57,6 +64,13 @@ export async function moveStatus(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ targetStatus, reason, actor }),
   });
-  if (!res.ok) throw new Error(`moveStatus ${res.status}`);
-  return res.json();
+  return asJson(res, 'moveStatus');
+}
+
+// Manual upload -> pipeline (handy for the demo; the timer also picks up data/input/).
+export async function uploadInvoice(file: File): Promise<{ id: string; businessStatus: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}/invoices/upload`, { method: 'POST', body: form });
+  return asJson(res, 'uploadInvoice');
 }

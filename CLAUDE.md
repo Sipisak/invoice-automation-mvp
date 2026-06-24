@@ -36,7 +36,7 @@ ukázat bezpečný end-to-end průchod faktury systémem, ne produkční řešen
 | Vrstva | Volba | Pozn. |
 |---|---|---|
 | Backend | **Azure Functions v4** (TypeScript 6, Node 22) | lokálně `func start`, produkčně M365/Azure. Node 22 = jediný podporovaný Functions runtime (Node 20 EOL 04/2026) |
-| Frontend | **SPFx React webpart** | poběží jako app v SharePointu. POZOR: SPFx 1.20.x chce Node 18 → při scaffoldu webu zvol verzi SPFx podporující Node 22 (1.21+), jinak konflikt s api |
+| Frontend | **Vite + React + TS** (standalone SPA) | PIVOT 2026-06-24 (od SPFx). Jedna celá stránka volající API; lokálně `pnpm dev` (proxy /api → :7071), produkčně build → statika za API (Static Web App / embed v SharePointu). Archivace do SharePoint/OneDrive = backend přes Graph (Den 6), ne UI. SPFx gotchy v §13 jsou tím obsolete. Viz `apps/web/README.md`. |
 | DB | **SQLite + Prisma 6** | lokálně 1 soubor; produkčně swap na Azure SQL. Prisma 7 odložena (vynucuje ESM + driver adapter — viz git) |
 | OCR | **pdf-parse 1.x** (textová PDF) + **mock fixtures** (scany) | pinnuto na v1 (v2 má jiné API); throwaway impl za `OcrService`, produkčně Azure Document Intelligence |
 | Monorepo | **pnpm workspaces** | sdílené typy mezi api a web |
