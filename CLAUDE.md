@@ -169,20 +169,20 @@ invoice-automation-mvp/
         rules.json          # mock rule engine
         mock-ocr/           # fixture JSON pro mock OCR
 
-    web/                    # SPFx webpart
+    web/                    # standalone Vite + React SPA (PIVOT ze SPFx, viz §2) — volá API
+      index.html
+      vite.config.ts        # dev proxy /api -> :7071 (lokálně bez CORS)
       src/
-        webparts/
-          invoiceReview/
-            InvoiceReviewWebPart.ts
-            components/
-              InvoiceReview.tsx
-              InvoiceList.tsx
-              InvoiceDetail.tsx
-              StatusBadge.tsx
-              FieldsTable.tsx
-              ApprovalBar.tsx
-            api/
-              invoicesClient.ts   # HttpClient wrapper (NE nativní fetch)
+        main.tsx
+        App.tsx             # layout + 5s auto-refresh + upload
+        types.ts            # mirror ExtractedValue/enums + parsery
+        client/
+          invoicesClient.ts # fetch wrapper (list/get/approve/move-status/upload)
+        components/
+          InvoiceList.tsx
+          InvoiceDetail.tsx
+          ApprovalBar.tsx
+          StatusBadge.tsx
 
   docs/
     architecture.md
@@ -423,6 +423,10 @@ Duplicita:                             Pohoda NE,  Intranet NE, stav DUPLICITA
 
 ## 12. Plán po dnech
 
+> **STAV: Den 1–7 hotové.** Tohle je původní plán (historie). Odchylka: frontend se NEdělal
+> jako SPFx, ale jako standalone **Vite + React SPA** (viz §2). Zmínky o `yo @microsoft/sharepoint`,
+> `gulp serve` a SPFx dev certifikátu v Den 1/Den 5 jsou tím nahrazené — viz `apps/web/README.md`.
+
 ### Den 1 — Setup
 - pnpm workspace + packages/shared (typy)
 - `func init apps/api`, `yo @microsoft/sharepoint` → apps/web
@@ -453,8 +457,8 @@ Duplicita:                             Pohoda NE,  Intranet NE, stav DUPLICITA
 - AuditLog při změně stavu
 - test 3 scénáře: A→K_ODSOUHLASENI, B→DOPLNIT_PRAVIDLO, C→NEPRECTENO_NEUPLNE
 
-### Den 5 — SPFx UI
-- `invoicesClient.ts` (HttpClient wrapper)
+### Den 5 — UI (postaveno jako Vite + React SPA, ne SPFx — viz §2)
+- `invoicesClient.ts` (fetch wrapper; dev proxy /api → :7071, bez CORS)
 - InvoiceList (tabulka, filtr, auto-refresh ~5s), StatusBadge
 - InvoiceDetail (pole + confidence, missingFields, warnings, routing)
 - ApprovalBar (Schválit / Duplicita / Přesunout stav)
@@ -473,25 +477,28 @@ Duplicita:                             Pohoda NE,  Intranet NE, stav DUPLICITA
 
 ---
 
-## 13. SPFx + Azure Functions gotchy (POZOR)
+## 13. Frontend + Azure Functions gotchy (POZOR)
 
-1. **CORS**: SPFx workbench běží na `https://localhost:4321`, Functions na `http://localhost:7071`.
-   V `local.settings.json`:
-   ```json
-   "Host": { "CORS": "https://localhost:4321", "CORSCredentials": false }
-   ```
-2. **HttpClient, ne fetch**: V SPFx volej přes `this.context.httpClient` (resp. wrapper
-   `invoicesClient.ts`), ne nativní `fetch`. Lokálně fetch projde, produkčně dělá problém.
-3. **gulp serve je pomalý** (build 20–60s). Používej hot reload, nebuildi ručně.
-4. **PDF náhled v SPFx vynech** — `react-pdf` má bundling problémy (webpack 4 + pdf.js worker).
-   Pro MVP zobraz jen vytěžená pole. → known-limitations.
-5. **Node verze**: api běží na **Node 22** (`nvm use 22`). POZOR na SPFx: 1.20.x chce
-   Node 18 — pokud bude web na 1.20.x, poběží na jiné Node verzi než api (dvě nvm verze),
-   nebo zvol SPFx podporující Node 22. Vyřešit při scaffoldu webu.
-6. **UI auto-refresh je nutný** — faktury přitékají přes timer, takže InvoiceList musí
-   sám pollovat (~5s), jinak uživatel nevidí naskakování. Dělá to demo živé.
-7. **Azure Functions process endpoint async**: `upload` vrací 202 + id, zpracování běží
-   na pozadí. API nesmí viset na OCR.
+> Frontend je standalone **Vite + React SPA** (pivot ze SPFx, §2). Původní SPFx gotchy
+> (workbench CORS, HttpClient místo fetch, gulp serve, SPFx Node 18) jsou tím **obsolete**.
+> Co platí teď:
+
+1. **CORS lokálně netřeba**: Vite dev server proxuje `/api` → `http://localhost:7071`
+   (`apps/web/vite.config.ts`), takže prohlížeč vidí same-origin. `invoicesClient.ts` volá
+   přes `fetch` na `import.meta.env.VITE_API_BASE ?? '/api'`. Produkčně nastav `VITE_API_BASE`
+   + zabezpeč API (CORS/auth) na serveru.
+2. **Node 22 všude** — api i web. Žádné dvě nvm verze (to byl SPFx problém).
+3. **PDF náhled vynechán** — mimo MVP scope (známé omezení), zobrazujeme jen vytěžená pole.
+4. **UI auto-refresh je nutný** — faktury přitékají přes timer, takže InvoiceList sám polluje
+   (~5s), jinak uživatel nevidí naskakování. Dělá to demo živé.
+5. **Azure Functions upload je async**: `upload` vrací 202 + id, těžké zpracování (OCR) běží
+   v pipeline. API nesmí viset na OCR.
+6. **Timer cold-start**: po čerstvém `func start` může první tick timeru přijít až ~1 min po
+   náběhu hostu (storage lease warmup), pak už spolehlivě à 5 s. Timer přesouvá soubor z
+   `input/` do `processed/` PŘED zpracováním → žádný re-ingest.
+7. **func nezabíjej přes `pkill -f "func start"`** — netrefí host proces, který drží otevřený
+   (smazaný) `dev.db` inode → stale čtení / „readonly database" zápisy. Použij
+   `lsof -ti tcp:7071 | xargs kill -9`.
 
 ---
 
