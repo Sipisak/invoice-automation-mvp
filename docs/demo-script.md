@@ -29,6 +29,9 @@ Otevři <http://localhost:4321> — prázdný seznam.
 1. **Prázdné UI.** Seznam je prázdný.
 2. **Přetáhni fakturu A** do `apps/api/data/input/` (nebo tlačítko *Nahrát fakturu* v UI).
    Za ~5 s (timer) se sama objeví jako **K_ODSOUHLASENI** — čitelná, kompletní, má účetní pravidlo.
+   > Pozn.: timer drainuje `input/` à 5 s a soubor přesune do `processed/` ještě před zpracováním,
+   > takže se nereprocesuje (žádné duplicity). Po **studeném** `func start` může první tick přijít
+   > až ~1 min po náběhu hostu — pak už spolehlivě à 5 s. Kdo nechce čekat, použije *Nahrát fakturu*.
 3. **Přetáhni B a C** (jedna dávka).
    - **B → DOPLNIT_PRAVIDLO** — přečtená, ale dodavatel nemá pravidlo.
    - **C → NEPRECTENO_NEUPLNE** — scan, nízká confidence, chybí částka/datum.
