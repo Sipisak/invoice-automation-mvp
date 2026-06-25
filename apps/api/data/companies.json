@@ -1,0 +1,10 @@
+{
+  "_comment": "Mock registry of OUR accounting units (the group's own companies). Maps the ourCompany name read off an invoice -> the unit's IČO/DIČ, which Pohoda needs as the dataPack root ico (§9: each company = its own XML). ponytail: JSON now; move to DB when companies are managed in the UI. IČO values are mock for the anonymized fixtures.",
+  "companies": [
+    {
+      "name": "Montáže Dvořák a.s.",
+      "ico": "27654321",
+      "dic": "CZ27654321"
+    }
+  ]
+}

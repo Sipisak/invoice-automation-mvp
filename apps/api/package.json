@@ -19,7 +19,9 @@
   "dependencies": {
     "@azure/functions": "^4.16.1",
     "@prisma/client": "^6.0.0",
-    "pdf-parse": "^1.1.1"
+    "exceljs": "^4.4.0",
+    "pdf-parse": "^1.1.1",
+    "xmlbuilder2": "^4.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

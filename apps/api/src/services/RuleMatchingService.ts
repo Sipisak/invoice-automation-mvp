@@ -45,4 +45,10 @@ export const RuleMatchingService = {
     if (!ico) return null;
     return loadRules().find((r) => r.supplierIco === ico) ?? null;
   },
+
+  // Resolve a stored ruleId back to its rule (export resolves accounting payload here, §ruleId-only).
+  byId(ruleId: string | null | undefined): AccountingRule | null {
+    if (!ruleId) return null;
+    return loadRules().find((r) => r.id === ruleId) ?? null;
+  },
 };
