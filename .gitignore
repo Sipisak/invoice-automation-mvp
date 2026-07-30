@@ -11,6 +11,13 @@ apps/api/prisma/*.db-journal
 .env.local
 .env.*.local
 
+.env
+.env.*
+!.env.example
+
+local.settings.json
+!local.settings.example.json
+
 # runtime invoice data (keep folders via .gitkeep, ignore contents)
 apps/api/data/input/*
 apps/api/data/processed/*
